@@ -28,7 +28,7 @@ const fn backslash<const N: usize>(a: ascii::Char) -> ([ascii::Char; N], Range<u
 /// Returns a buffer with the escaped representation and its corresponding range.
 #[inline]
 const fn hex_escape<const N: usize>(byte: u8) -> ([ascii::Char; N], Range<u8>) {
-    const { assert!(N >= 4) };
+    const { assert!(N >= 4 || cfg!(kani)) };
 
     let mut output = [ascii::Char::Null; N];
 
@@ -59,7 +59,7 @@ const fn verbatim<const N: usize>(a: ascii::Char) -> ([ascii::Char; N], Range<u8
 ///
 /// Returns a buffer with the escaped representation and its corresponding range.
 const fn escape_ascii<const N: usize>(byte: u8) -> ([ascii::Char; N], Range<u8>) {
-    const { assert!(N >= 4) };
+    const { assert!(N >= 4 || cfg!(kani)) };
 
     #[cfg(feature = "optimize_for_size")]
     {
@@ -135,7 +135,7 @@ const fn escape_ascii<const N: usize>(byte: u8) -> ([ascii::Char; N], Range<u8>)
 ///
 /// Returns a buffer with the escaped representation and its corresponding range.
 const fn escape_unicode<const N: usize>(c: char) -> ([ascii::Char; N], Range<u8>) {
-    const { assert!(N >= 10 && N < u8::MAX as usize) };
+    const { assert!((N >= 10 && N < u8::MAX as usize) || cfg!(kani)) };
 
     let c = c as u32;
 

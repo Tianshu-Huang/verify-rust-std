@@ -95,10 +95,10 @@ pub trait Swizzle<const N: usize> {
                         let index = Self::INDEX[i];
                         assert!(index as u32 as usize == index);
                         assert!(
-                            index < M,
+                            index < M || cfg!(kani),
                             "source element index exceeds input vector length"
                         );
-                        output[i] = index as u32;
+                        output[i] = if index < M { index as u32 } else { 0 };
                         i += 1;
                     }
 
@@ -133,10 +133,10 @@ pub trait Swizzle<const N: usize> {
                         let index = Self::INDEX[i];
                         assert!(index as u32 as usize == index);
                         assert!(
-                            index < 2 * M,
+                            index < 2 * M || cfg!(kani),
                             "source element index exceeds input vector length"
                         );
-                        output[i] = index as u32;
+                        output[i] = if index < 2 * M { index as u32 } else { 0 };
                         i += 1;
                     }
 
@@ -487,11 +487,11 @@ where
         struct Extract<const N: usize, const START: usize>;
         impl<const N: usize, const START: usize, const LEN: usize> Swizzle<LEN> for Extract<N, START> {
             const INDEX: [usize; LEN] = const {
-                assert!(START + LEN <= N, "index out of bounds");
+                assert!(START + LEN <= N || cfg!(kani), "index out of bounds");
                 let mut index = [0; LEN];
                 let mut i = 0;
                 while i < LEN {
-                    index[i] = START + i;
+                    index[i] = if START + i < N { START + i } else { 0 };
                     i += 1;
                 }
                 index

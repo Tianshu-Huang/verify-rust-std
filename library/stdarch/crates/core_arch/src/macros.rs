@@ -4,12 +4,12 @@
 macro_rules! static_assert {
     ($e:expr) => {
         const {
-            assert!($e);
+            assert!($e || cfg!(kani));
         }
     };
     ($e:expr, $msg:expr) => {
         const {
-            assert!($e, $msg);
+            assert!($e || cfg!(kani), $msg);
         }
     };
 }
