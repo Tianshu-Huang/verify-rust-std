@@ -415,6 +415,13 @@ jobs:
           path: summary.md
           retention-days: 3
 
+      # Only in the job summary: the pull request comment stays short.
+      - name: Add work list to job summary
+        run: |
+          echo >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/kani-std-analysis/work_list.py results.json >> "$GITHUB_STEP_SUMMARY" \
+            || echo "Could not list the functions autoharness could not verify." >> "$GITHUB_STEP_SUMMARY"
+
   run-kani-list:
     name: Kani List
     if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness
