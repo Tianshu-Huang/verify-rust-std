@@ -35,7 +35,7 @@ class SummarizeTest(unittest.TestCase):
     def test_without_base(self):
         head = {'a': ['Verified'], 'b': ['Failed', 'Verified'], 'c': ['Timed out']}
         self.assertEqual(summarize(head), '\n'.join([
-            '### Autoharness results',
+            '### Harnesses verified in CI',
             '',
             '| | Harnesses |',
             '| --- | ---: |',
@@ -64,7 +64,7 @@ class SummarizeTest(unittest.TestCase):
             'two_crates': ['Verified'],
         }
         self.assertEqual(summarize(head, base), '\n'.join([
-            '### Autoharness results',
+            '### Harnesses verified in CI',
             '',
             '| | Base | This run | Change |',
             '| --- | ---: | ---: | ---: |',
