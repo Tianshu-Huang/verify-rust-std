@@ -321,6 +321,10 @@ jobs:
     name: Build JSON from logs
     if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness
     needs: [run_kani_metrics, kani_autoharness]
+    # `gh run list` and `gh run download` below read other runs of this repository.
+    permissions:
+      actions: read
+      contents: read
     runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
     strategy:
       matrix:
@@ -369,6 +373,47 @@ jobs:
           name: ${{ matrix.os }}-results.json
           path: results.json
           if-no-files-found: error
+
+      # Compare with the last successful run on main that has results: the last merge queue run,
+      # else the last manual run on main. Without one, the summary shows this run alone.
+      - name: Download results of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          base_run=$(gh run list --workflow kani.yml --event merge_group --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty') || true
+          if [ -z "$base_run" ]; then
+            base_run=$(gh run list --workflow kani.yml --event workflow_dispatch --branch main --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty') || true
+          fi
+          if [ -n "$base_run" ] && gh run download "$base_run" --name ${{ matrix.os }}-results.json --dir base; then
+            echo "BASE_RUN=$base_run" >> "$GITHUB_ENV"
+          else
+            echo "No results of main found; the summary will not show changes."
+          fi
+
+      # The same text goes to the job summary here and, uploaded, to the pull request comment
+      # that kani-autoharness-comment.yml posts. A failure here must not fail the run.
+      - name: Add autoharness results to job summary
+        env:
+          RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
+        run: |
+          {
+            python3 scripts/kani-std-analysis/results_summary.py results.json \
+              ${BASE_RUN:+--base base/results.json} || echo "Could not summarize results.json."
+            echo
+            echo "Counts cover the functions the autoharness job selects, not the whole library."
+            echo "Results of [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }} for commit ${{ github.event.pull_request.head.sha || github.sha }}${BASE_RUN:+, compared with [run $BASE_RUN on main]($RUNS_URL/$BASE_RUN)}."
+          } > summary.md
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-summary.md
+          path: summary.md
+          retention-days: 3
 
   run-kani-list:
     name: Kani List
