@@ -233,11 +233,13 @@ jobs:
             --exclude-pattern ::precondition_check \
             --harness-timeout 10m \
             --default-unwind 1000 \
-            --jobs=3 --output-format=terse | tee autoharness-verification.log
+            --jobs=3 --output-format=terse | tee autoharness-verification.log || status=$?
+          # Keep the log when a harness fails: the results and the summary are built from it.
           gzip autoharness-verification.log
+          exit ${status:-0}
 
       - name: Upload Autoharness Verification Log
-        if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness
+        if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness) }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-autoharness-verification.log.gz
@@ -319,8 +321,9 @@ jobs:
 
   run-log-analysis:
     name: Build JSON from logs
-    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness
-    needs: [run_kani_metrics, kani_autoharness]
+    # Also after a failed harness, so that the summary can say which one failed.
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness) }}
+    needs: [run_kani_metrics, kani_autoharness, run-autoharness-analyzer]
     # `gh run list` and `gh run download` below read other runs of this repository.
     permissions:
       actions: read
@@ -374,6 +377,13 @@ jobs:
           path: results.json
           if-no-files-found: error
 
+      - name: Download analyzer output
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: autoharness-coverage
+          path: coverage
+
       # Compare with the last successful run on main that has results: the last merge queue run,
       # else the last manual run on main. Without one, the summary shows this run alone.
       - name: Download results of main
@@ -389,6 +399,10 @@ jobs:
           fi
           if [ -n "$base_run" ] && gh run download "$base_run" --name ${{ matrix.os }}-results.json --dir base; then
             echo "BASE_RUN=$base_run" >> "$GITHUB_ENV"
+            # A run from before the analyzer uploaded its output has none.
+            if gh run download "$base_run" --name autoharness-coverage --dir base-coverage; then
+              echo "BASE_COVERAGE=base-coverage" >> "$GITHUB_ENV"
+            fi
           else
             echo "No results of main found; the summary will not show changes."
           fi
@@ -400,6 +414,9 @@ jobs:
           RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
         run: |
           {
+            python3 scripts/kani-std-analysis/coverage_summary.py coverage \
+              ${BASE_COVERAGE:+--base "$BASE_COVERAGE"} || echo "Could not summarize the analyzer output."
+            echo
             python3 scripts/kani-std-analysis/results_summary.py results.json \
               ${BASE_RUN:+--base base/results.json} || echo "Could not summarize results.json."
             echo
@@ -415,12 +432,32 @@ jobs:
           path: summary.md
           retention-days: 3
 
-      # Only in the job summary: the pull request comment stays short.
-      - name: Add work list to job summary
+      # The results of this run alone, with the functions that still need help. After a run on
+      # main, kani-autoharness-comment.yml writes it to the "Autoharness status" issue.
+      - name: Write status
+        env:
+          RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
         run: |
-          echo >> "$GITHUB_STEP_SUMMARY"
-          python3 scripts/kani-std-analysis/work_list.py results.json >> "$GITHUB_STEP_SUMMARY" \
-            || echo "Could not list the functions autoharness could not verify." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "The autoharness results on \`main\`. A workflow rewrites this issue after every merge."
+            echo
+            python3 scripts/kani-std-analysis/coverage_summary.py coverage || echo "Could not summarize the analyzer output."
+            echo
+            python3 scripts/kani-std-analysis/results_summary.py results.json || echo "Could not summarize results.json."
+            echo
+            echo "Counts cover the functions the autoharness job selects, not the whole library."
+            echo
+            python3 scripts/kani-std-analysis/work_list.py coverage || echo "Could not list the functions that need help."
+            echo
+            echo "From [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }} for commit ${{ github.sha }}."
+          } > status.md
+
+      - name: Upload status
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-status.md
+          path: status.md
+          retention-days: 3
 
   run-kani-list:
     name: Kani List
@@ -497,3 +534,11 @@ jobs:
           echo "## Crate std, unsafe functions" >> "$GITHUB_STEP_SUMMARY"
           cat std_unsafe_autoharness_data.md >> "$GITHUB_STEP_SUMMARY"
           popd
+
+      # For the summary of run-log-analysis, and for later runs to compare with.
+      - name: Upload analyzer output
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoharness-coverage
+          path: scripts/autoharness_analyzer/*_autoharness_data.json
+          if-no-files-found: error

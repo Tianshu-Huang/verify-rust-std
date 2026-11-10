@@ -1,57 +1,109 @@
 # Posts the autoharness results of a pull request as a comment on it, and updates that comment
-# on later runs. "Kani autoharness on request" cannot comment itself: for a pull request from a
-# fork its token is read-only. This workflow runs after it, with a token that can comment. It
-# never checks out or runs code of the pull request; it only posts the summary that run uploaded.
+# on later runs. Every pull request gets the comment when it goes through the merge queue; one
+# with the run-autoharness label gets it earlier. After a run on main it also rewrites the
+# "Autoharness status" issue. The runs cannot do this themselves: for a pull request from a fork
+# their token is read-only. This workflow runs after them, with a token that can write. It
+# never checks out or runs code of the pull request; it only posts what that run uploaded.
 name: Kani autoharness comment
 
 on:
   workflow_run:
-    workflows: ["Kani autoharness on request"]
+    workflows: ["Kani autoharness on request", "Kani"]
     types: [completed]
 
 permissions:
   actions: read
   pull-requests: write
+  issues: write
 
-# One comment per branch: runs that finish close together must not each create one.
-concurrency:
-  group: autoharness-comment-${{ github.event.workflow_run.head_repository.owner.login }}-${{ github.event.workflow_run.head_branch }}
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  HEAD_RUN: ${{ github.event.workflow_run.id }}
 
 jobs:
   comment:
-    if: github.event.workflow_run.conclusion == 'success'
+    # Of the "Kani" runs, only those of the merge queue run autoharness for a pull request.
+    # A failed run gets a comment too: it says so, and lists what no longer verifies.
+    if: >-
+      contains(fromJSON('["success", "failure"]'), github.event.workflow_run.conclusion) &&
+      (github.event.workflow_run.name == 'Kani autoharness on request' ||
+       github.event.workflow_run.event == 'merge_group')
     runs-on: ubuntu-latest
+    # One comment per branch: runs that finish close together must not each create one.
+    concurrency:
+      group: autoharness-comment-${{ github.event.workflow_run.head_repository.owner.login }}-${{ github.event.workflow_run.head_branch }}
     env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      HEAD_RUN: ${{ github.event.workflow_run.id }}
       HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
     steps:
-      # shortcut: reports the Linux results only, add macOS if the two ever differ.
-      - name: Download summary
+      - name: Find the pull request
         run: |
-          if ! gh run download "$HEAD_RUN" --name ubuntu-latest-summary.md --dir head; then
-            echo "Run $HEAD_RUN uploaded no summary (autoharness did not run)."
-            exit 0
+          # The merge queue tests a pull request on a branch named after it.
+          if [[ "$HEAD_BRANCH" =~ ^gh-readonly-queue/.*/pr-([0-9]+)-[0-9a-f]+$ ]]; then
+            pr=${BASH_REMATCH[1]}
+          else
+            pr=$(gh api -X GET "repos/$GH_REPO/pulls" -f state=open -f base=main -f head="$HEAD_OWNER:$HEAD_BRANCH" \
+              --jq '.[0].number // empty')
           fi
-          echo "FOUND=1" >> "$GITHUB_ENV"
-
-      - name: Post comment
-        if: env.FOUND == '1'
-        run: |
-          pr=$(gh api -X GET "repos/$GH_REPO/pulls" -f state=open -f base=main -f head="$HEAD_OWNER:$HEAD_BRANCH" \
-            --jq '.[0].number // empty')
           if [ -z "$pr" ]; then
-            echo "No open pull request for $HEAD_OWNER:$HEAD_BRANCH."
-            exit 0
+            echo "No pull request for $HEAD_OWNER:$HEAD_BRANCH."
           fi
-          { echo "<!-- autoharness-results -->"; cat head/summary.md; } > comment.md
-          comment=$(gh api "repos/$GH_REPO/issues/$pr/comments" --paginate \
+          echo "PR=$pr" >> "$GITHUB_ENV"
+
+      # shortcut: reports the Linux results only, add macOS if the two ever differ.
+      - name: Post comment
+        if: env.PR != ''
+        run: |
+          gh run download "$HEAD_RUN" --name ubuntu-latest-summary.md --dir head \
+            || echo "Run $HEAD_RUN uploaded no summary."
+          {
+            echo "<!-- autoharness-results -->"
+            if [ "$CONCLUSION" != success ]; then
+              echo "**[This run]($RUN_URL) failed.**"
+              echo
+            fi
+            if [ -f head/summary.md ]; then
+              cat head/summary.md
+            else
+              echo "It produced no autoharness results."
+            fi
+          } > comment.md
+          comment=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- autoharness-results -->"))) | .id' \
             | head -n 1)
           if [ -n "$comment" ]; then
             gh api -X PATCH "repos/$GH_REPO/issues/comments/$comment" -F body=@comment.md
           else
-            gh pr comment "$pr" --body-file comment.md
+            gh pr comment "$PR" --body-file comment.md
+          fi
+
+  status:
+    # Results of main: a merge queue run, or a manual run on main.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.name == 'Kani' &&
+      (github.event.workflow_run.event == 'merge_group' ||
+       (github.event.workflow_run.event == 'workflow_dispatch' &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-latest
+    # One issue: two runs must not each create it.
+    concurrency:
+      group: autoharness-status
+    steps:
+      - name: Update the status issue
+        run: |
+          if ! gh run download "$HEAD_RUN" --name ubuntu-latest-status.md --dir status; then
+            echo "Run $HEAD_RUN uploaded no status."
+            exit 0
+          fi
+          issue=$(gh api "repos/$GH_REPO/issues?state=open&per_page=100" --paginate \
+            --jq '.[] | select(.title == "Autoharness status" and .user.login == "github-actions[bot]" and (has("pull_request") | not)) | .number' \
+            | head -n 1)
+          if [ -n "$issue" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/$issue" -F body=@status/status.md
+          else
+            gh issue create --title "Autoharness status" --body-file status/status.md
           fi

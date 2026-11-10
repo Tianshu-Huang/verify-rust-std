@@ -1,72 +1,90 @@
+import json
+import os
+import tempfile
 import unittest
 
-from work_list import missing_types, work_list
+from work_list import work_list
+
+MISSING = 'Missing Arbitrary implementation for argument(s)'
+BOUNDED = 'Requires --bounded-arguments for argument(s)'
 
 
-def record(harness, **fields):
-    """A log_parser record of an automatic harness, verified unless overridden."""
-    result = {
-        'harness': harness, 'is_autoharness': True, 'autoharness_result': 'ok',
-        'with_contract': False, 'crate': 'core', 'function': harness,
-        'function_safeness': 'safe', 'public_target': False, 'file_name': None,
-        'n_failed_properties': 0, 'n_total_properties': 3,
-        'result': 'SUCCESSFUL', 'time': '1s', 'output': [],
-    }
-    result.update(fields)
-    return {'thread_id': 0, 'result': result}
-
-
-def skipped(harness, reason, **fields):
-    return record(harness, autoharness_result=reason, n_total_properties=None,
-                  result=None, time=None, **fields)
+def analyzer_output(core):
+    """Directory with analyzer JSON; `core` maps function -> (reason,
+    safety, types). alloc and std are empty."""
+    directory = tempfile.mkdtemp()
+    for crate, skipped in [('core', core), ('alloc', {}), ('std', {})]:
+        path = os.path.join(directory, f'{crate}_autoharness_data.json')
+        with open(path, 'w') as f:
+            json.dump({'chosen': [['fine', 'safe']], 'skipped': {
+                name: {'reason': reason, 'safety': safety, 'types': types}
+                for name, (reason, safety, types) in skipped.items()}}, f)
+    return directory
 
 
 class WorkListTest(unittest.TestCase):
+    def test_groups_by_blocker(self):
+        directory = analyzer_output({
+            'generic': ('Generic Function', 'safe', []),
+            'b_safe': (MISSING, 'safe', ['&mut i32']),
+            'c_unsafe': (MISSING, 'unsafe', ['&mut i32', '*const u8']),
+            # The same type twice blocks this function once.
+            'a_safe': (MISSING, None, ['*const u8', '*const u8']),
+            'bounded': (BOUNDED, 'safe', ['&[u8]']),
+            # Nothing a contributor can unblock.
+            'no_body': ('The function does not have a body', 'safe', []),
+            'kani': ('Kani implementation', 'unsafe', []),
+        })
+        self.assertEqual(work_list(directory), '\n'.join([
+            '### Where autoharness needs help',
+            '',
+            '| No harness because | Functions | Unsafe | What unblocks them |',
+            '| --- | ---: | ---: | --- |',
+            '| generic function | 1 | 0 '
+            '| write a harness that calls it with one concrete type |',
+            '| an argument type has no `kani::Arbitrary` | 3 | 1 '
+            '| implement `kani::Arbitrary` for the type, or write a harness '
+            'that builds the argument |',
+            '| needs `--bounded-arguments` | 1 | 0 '
+            '| write a harness that bounds the argument |',
+            '',
+            '<details><summary>Argument types, by functions they block (3)'
+            '</summary>',
+            '',
+            '- `&mut i32`: 2',
+            '- `*const u8`: 2',
+            '- `&[u8]`: 1',
+            '',
+            '</details>',
+            '',
+            '<details><summary>generic function (1)</summary>',
+            '',
+            '- `core: generic`',
+            '',
+            '</details>',
+            '',
+            '<details><summary>an argument type has no '
+            '<code>kani::Arbitrary</code> (3)</summary>',
+            '',
+            '- `core: c_unsafe` (unsafe)',
+            '- `core: a_safe`',
+            '- `core: b_safe`',
+            '',
+            '</details>',
+            '',
+            '<details><summary>needs <code>--bounded-arguments</code> (1)'
+            '</summary>',
+            '',
+            '- `core: bounded`',
+            '',
+            '</details>',
+            '',
+        ]))
 
-    def test_all_verified_prints_no_table(self):
-        out = work_list([record('a::f'), record('a::g', is_autoharness=False, result='FAILED')])
-        self.assertIn('Every selected function verified', out)
-        self.assertNotIn('| Blocker', out)
+    def test_nothing_blocked(self):
+        self.assertIn('Autoharness generates a harness for every function.',
+                      work_list(analyzer_output({})))
 
-    def test_groups_count_and_list_unsafe_first(self):
-        out = work_list([
-            record('ok::verified'),
-            record('vac::nothing', n_total_properties=0),
-            record('fail::safe_fn', result='FAILED', n_failed_properties=1),
-            record('fail::unsafe_fn', result='FAILED', function_safeness='unsafe',
-                   public_target=True, file_name='library/core/src/ptr/mod.rs'),
-            record('slow::loop', result='FAILED', time='TO'),
-            record('lost::no_result', result=None, n_total_properties=None),
-            skipped('gen::f', 'Generic Function: no candidate type satisfies the bounds'),
-            skipped('bound::f', 'Requires --bounded-arguments for argument(s) s: &str'),
-            skipped('arb::one', MISSING + 'p: NonNull<T>'),
-            skipped('arb::two', MISSING + 'p: NonNull<T>, m: HashMap<K, V>'),
-            skipped('filtered::f', 'Did not match provided filters'),
-            skipped('nobody::f', 'The function does not have a body'),
-        ])
-        self.assertIn('| Argument type without `kani::Arbitrary` | 2 |', out)
-        self.assertIn('| Needs `--bounded-arguments` | 1 |', out)
-        self.assertIn('| Generic function | 1 |', out)
-        self.assertIn('| Nothing checked (0 properties) | 1 |', out)
-        self.assertIn('| Verification failed | 2 |', out)
-        self.assertIn('| Timed out | 1 |', out)
-        self.assertIn('| Chosen but no result | 1 |', out)
-        self.assertNotIn('filtered::f', out)
-        self.assertNotIn('nobody::f', out)
-        # HashMap<K, V> is one type, not two, and NonNull blocks two functions.
-        self.assertIn('- `NonNull<T>`: 2\n- `HashMap<K, V>`: 1', out)
-        self.assertIn('<summary>Needs <code>--bounded-arguments</code> (1)</summary>', out)
-        self.assertIn('<summary>Verification failed (2)</summary>\n\n'
-                      '- `fail::unsafe_fn` (core, unsafe, public) `library/core/src/ptr/mod.rs`\n'
-                      '- `fail::safe_fn` (core, safe)', out)
-
-    def test_missing_types_nested_generics(self):
-        self.assertEqual(
-            missing_types(MISSING + 'a: Option<Result<T, E>>, b: u8'),
-            ['Option<Result<T, E>>', 'u8'])
-
-
-MISSING = 'Missing Arbitrary implementation for argument(s) '
 
 if __name__ == '__main__':
     unittest.main()

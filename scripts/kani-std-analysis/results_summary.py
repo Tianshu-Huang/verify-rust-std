@@ -69,6 +69,12 @@ def listed(items, render):
     return lines
 
 
+def change_row(label, old, new):
+    """Table row with a count in two runs and the signed difference."""
+    change = f'{new - old:+d}' if new != old else '0'
+    return f'| {label} | {old} | {new} | {change} |'
+
+
 def section(title, changes):
     """Markdown list of (harness, base runs, head runs), or nothing if empty."""
     if not changes:
@@ -82,17 +88,14 @@ def summarize(head, base=None):
 
     Both are the output of `harness_verdicts`.
     """
-    lines = ['### Autoharness results', '']
+    lines = ['### Harnesses verified in CI', '']
     if base is None:
         lines += ['| | Harnesses |', '| --- | ---: |']
         lines += [f'| {v} | {count(head, v)} |' for v in VERDICTS]
         return '\n'.join(lines) + '\n'
 
     lines += ['| | Base | This run | Change |', '| --- | ---: | ---: | ---: |']
-    for v in VERDICTS:
-        old, new = count(base, v), count(head, v)
-        change = f'{new - old:+d}' if new != old else '0'
-        lines.append(f'| {v} | {old} | {new} | {change} |')
+    lines += [change_row(v, count(base, v), count(head, v)) for v in VERDICTS]
 
     gained, lost, other = [], [], []
     for harness in sorted(base.keys() | head.keys()):
