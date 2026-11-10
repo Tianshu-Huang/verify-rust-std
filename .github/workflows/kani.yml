@@ -224,6 +224,8 @@ jobs:
             --include-pattern ptr::alignment::Alignment::mask \
             --include-pattern ptr::alignment::Alignment::new \
             --include-pattern ptr::alignment::Alignment::new_unchecked \
+            --include-pattern "ptr::const_ptr::<impl[[:space:]]\*const[[:space:]](.+)>::read$" \
+            --include-pattern "ptr::mut_ptr::<impl[[:space:]]\*mut[[:space:]](.+)>::write$" \
             --include-pattern time::Duration::from_micros \
             --include-pattern time::Duration::from_millis \
             --include-pattern time::Duration::from_nanos \

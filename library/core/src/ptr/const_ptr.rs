@@ -1264,6 +1264,8 @@ impl<T: PointeeSized> *const T {
     #[rustc_const_stable(feature = "const_ptr_read", since = "1.71.0")]
     #[inline(always)]
     #[track_caller]
+    // Safety precondition from `ptr::read`: `self` must be valid for reads and properly aligned.
+    #[requires(core::ub_checks::can_dereference(self))]
     pub const unsafe fn read(self) -> T
     where
         T: Sized,
@@ -2771,4 +2773,18 @@ mod verify {
     //         ptr_caller.byte_offset_from(ptr_input);
     //     }
     // }
+
+    // An in-bounds pointer into the generator's buffer; the precondition (`can_dereference`)
+    // is assumed on it, which prunes the misaligned and uninitialized offsets.
+    #[kani::proof_for_contract(<*const i32>::read)]
+    pub fn check_const_read_i32() {
+        const BUF_SIZE: usize = 8;
+        let mut generator = kani::PointerGenerator::<BUF_SIZE>::new();
+        let test_ptr: *const i32 = generator.any_in_bounds().ptr;
+        unsafe {
+            let val = test_ptr.read();
+            // Read back the value and assert it's correct
+            assert_eq!(val, *test_ptr);
+        }
+    }
 }
