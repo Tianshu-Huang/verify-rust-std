@@ -44,3 +44,17 @@ jobs:
           echo "## Crate std, unsafe functions" >> "$GITHUB_STEP_SUMMARY"
           cat std_unsafe_autoharness_data.md >> "$GITHUB_STEP_SUMMARY"
           popd
+
+      # Backfill only: keep the name-level inputs, to compare with later runs.
+      - name: Collect analyzer inputs
+        run: |
+          mkdir analyzer-inputs
+          find target/kani_verify_std/target -name '*kani-metadata.json' -exec cp {} analyzer-inputs/ \;
+          cp /tmp/std_lib_analysis/results/*_scan_functions.csv analyzer-inputs/
+          ls -la analyzer-inputs
+
+      - name: Upload analyzer inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-inputs
+          path: analyzer-inputs
