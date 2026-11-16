@@ -148,7 +148,7 @@ fn main() -> Result<()> {
             args.scanner_results_path, crate_name
         );
         let scanner_fn_csv_path = Path::new(&scanner_fn_csv);
-        let fn_to_row_data = process_scan_fns(scanner_fn_csv_path)?;
+        let fn_to_row_data = process_scan_fns(scanner_fn_csv_path, crate_name)?;
 
         let autoharness_md: AutoHarnessMetadata =
             serde_json::from_value(normalize_skip_reasons(v["autoharness_md"].clone()))?;

@@ -24,7 +24,7 @@ pub struct ScanFnsRow {
     has_loop_or_iterator: bool,
 }
 
-pub fn process_scan_fns(file_path: &Path) -> Result<HashMap<String, ScanFnsRow>> {
+pub fn process_scan_fns(file_path: &Path, krate: &str) -> Result<HashMap<String, ScanFnsRow>> {
     let file = File::open(file_path).unwrap_or_else(|_| panic!("Cannot open file {:?}", file_path));
     let reader = BufReader::new(file);
     let mut fn_to_row_data = HashMap::new();
@@ -50,10 +50,48 @@ pub fn process_scan_fns(file_path: &Path) -> Result<HashMap<String, ScanFnsRow>>
         // Now that we've found the function name, the rest is just booleans, so we can split by ; to get the rest
         fields.extend(rest[1..].split(';'));
 
+        let name = strip_crate_prefix(name, krate);
+        fields[0] = &name;
         parse_row(&mut fn_to_row_data, fields, index + 1)?;
     }
 
     Ok(fn_to_row_data)
+}
+
+// Backfill only: copy of Kani's `kani_metadata::strip_crate_prefix` (model-checking/kani#4903).
+fn strip_crate_prefix(name: &str, krate: &str) -> String {
+    let needle = format!("{krate}::");
+    if !name.contains(&needle) {
+        return name.to_string();
+    }
+    let mut out = String::with_capacity(name.len());
+    let mut rest = name;
+    // The previous char in the input, used to decide whether a `<crate>::` here
+    // is a crate-root *qualifier* (droppable) or a path *continuation* segment
+    // (a module/item that happens to share the crate's name, which must be
+    // kept). A qualifier appears at the start or after a type/path delimiter
+    // (`<`, `,`, ` `, `&`, `*`, `(`, `[`, ...); a continuation appears after
+    // `::`. So drop `<crate>::` only when the previous char is neither part of
+    // an identifier nor `:`. After dropping, pretend the previous char is `:`
+    // so an immediately following same-named segment is treated as a
+    // continuation (e.g. `main::main::{closure#0}` -> `main::{closure#0}`).
+    let mut prev: Option<char> = None;
+    loop {
+        let at_qualifier = match prev {
+            None => true,
+            Some(c) => !c.is_alphanumeric() && c != '_' && c != ':',
+        };
+        if at_qualifier && rest.starts_with(&needle) {
+            rest = &rest[needle.len()..];
+            prev = Some(':');
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else { break };
+        out.push(ch);
+        prev = Some(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    out
 }
 
 fn parse_row(
