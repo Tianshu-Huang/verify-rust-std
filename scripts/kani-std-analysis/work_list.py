@@ -7,24 +7,30 @@ by what blocks them, as Markdown. Given a directory with the
 ```
 python3 work_list.py coverage/
 ```
-prints, for each blocker, how many functions it holds back and what would
-unblock them, the argument types that block the most functions, and the first
+prints, for each blocker, how many functions it holds back and the Kani issues
+that track it, the argument types that block the most functions, and the first
 functions of each group, unsafe ones first.
 """
 
 import argparse
 import collections
 
-from coverage_summary import REASONS, load, row_of
+from coverage_summary import OTHER, REASONS, load, row_of
 from results_summary import code_span, listed
 
-# What a contributor can do about each blocker, in the order of REASONS.
-ACTIONS = dict(zip(REASONS.values(), [
-    'write a harness that calls it with one concrete type',
-    'implement `kani::Arbitrary` for the type, or write a harness that '
-    'builds the argument',
-    'write a harness that bounds the argument',
+KANI_ISSUES = 'https://redirect.github.com/model-checking/kani/issues'
+# For each blocker, in the order of REASONS: what it means in plain words, the
+# title of its list of functions, and the Kani issues that track it. The links
+# go through redirect.github.com so that they leave no mention on those issues.
+BLOCKERS = dict(zip(REASONS.values(), [
+    ('The function is generic and autoharness has no type to pick',
+     'Generic functions', [4888, 4889]),
+    ('Kani cannot create a value for one of the argument types',
+     'Functions blocked by an argument type', [4887, 5137]),
+    ('An argument needs a size limit',
+     'Functions that need a size limit', [4890]),
 ]))
+BAR = 12
 
 
 def summary(text):
@@ -47,33 +53,46 @@ def work_list(directory):
     for crate, data in load(directory):
         for function, skipped in data['skipped'].items():
             blocker = row_of(skipped['reason'])
-            if blocker in ACTIONS:
+            if blocker is not None:
                 blocked[blocker].append(
                     (skipped['safety'] == 'unsafe', f'{crate}: {function}'))
                 by_type.update(set(skipped['types']))
 
-    lines = ['### Where autoharness needs help', '']
-    if not blocked:
-        return '\n'.join(
-            lines + ['Autoharness generates a harness for every function.']
-        ) + '\n'
-    lines += ['| No harness because | Functions | Unsafe | What unblocks them |',
-              '| --- | ---: | ---: | --- |']
-    for blocker, action in ACTIONS.items():
-        functions = blocked[blocker]
-        lines.append(f'| {blocker} | {len(functions)} '
-                     f'| {sum(unsafe for unsafe, _ in functions)} | {action} |')
+    total = sum(len(functions) for functions in blocked.values())
+    if not total:
+        return 'Autoharness writes a harness for every function.\n'
+    lines = [f'### Why {total:,} functions have no harness yet', '',
+             '| Reason | | Functions | Share | Where to help |',
+             '| --- | --- | ---: | ---: | --- |']
+    largest = max(len(functions) for functions in blocked.values())
+    # Largest group first; the reasons nobody tracks go last.
+    rows = sorted(BLOCKERS, key=lambda b: -len(blocked[b])) + [OTHER]
+    for blocker in rows:
+        count = len(blocked[blocker])
+        if not count:
+            continue
+        text, _, issues = BLOCKERS.get(blocker, ('Other', None, []))
+        links = ', '.join(f'[kani#{i}]({KANI_ISSUES}/{i})' for i in issues)
+        bar = '█' * round(BAR * count / largest) or '▏'
+        lines.append(f'| {text} | {bar} | {count:,} '
+                     f'| {100 * count / total:.0f}% | {links} |')
+    lines += ['', 'These are fixed in Kani, not in this repository. The '
+              'numbers move when a pull request here updates the Kani version.',
+              '', '**The functions, one by one**']
     if by_type:
         types = sorted(by_type.items(), key=lambda t: (-t[1], t[0]))
         lines += details(
-            f'Argument types, by functions they block ({len(types)})',
-            listed(types, lambda t: f'- {code_span(t[0])}: {t[1]}'))
-    for blocker in ACTIONS:
+            'Argument types that block the most functions '
+            f'({len(types):,} types)',
+            listed(types, lambda t: f'- {code_span(t[0])}: {t[1]:,}'))
+    for blocker in rows[:-1]:
         # Unsafe functions first: they are the ones the challenges ask for.
         functions = sorted(blocked[blocker], key=lambda f: (not f[0], f[1]))
         if functions:
+            unsafe = sum(is_unsafe for is_unsafe, _ in functions)
             lines += details(
-                f'{blocker} ({len(functions)})',
+                f'{BLOCKERS[blocker][1]} ({len(functions):,}, '
+                f'of which {unsafe:,} unsafe)',
                 listed(functions, lambda f: f'- {code_span(f[1])}'
                        + (' (unsafe)' if f[0] else '')))
     return '\n'.join(lines) + '\n'
