@@ -87,7 +87,7 @@ def plot(history, out):
         'xtick.color': muted, 'ytick.color': muted})
     fig, (bar, line) = plt.subplots(
         2, 1, figsize=(8, 4.6),
-        gridspec_kw={'height_ratios': [1, 3.2], 'hspace': 0.75})
+        gridspec_kw={'height_ratios': [1, 3.2], 'hspace': 0.5})
 
     # Where every function stands today: one bar, three states.
     last = [e for e in history if e['crates']][-1]

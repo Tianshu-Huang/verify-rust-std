@@ -44,18 +44,45 @@
     },
     {
       "date": "2026-09-13",
-      "crates": null,
-      "run": 34731994259
+      "crates": {
+        "core": {
+          "generated": 13955,
+          "total": 22591
+        },
+        "std": {
+          "generated": 1316,
+          "total": 4246
+        }
+      },
+      "run": 43960709423
     },
     {
       "date": "2026-09-20",
-      "crates": null,
-      "run": 35528670453
+      "crates": {
+        "core": {
+          "generated": 13955,
+          "total": 22591
+        },
+        "std": {
+          "generated": 1316,
+          "total": 4246
+        }
+      },
+      "run": 43960709423
     },
     {
       "date": "2026-09-27",
-      "crates": null,
-      "run": 36339843863
+      "crates": {
+        "core": {
+          "generated": 13955,
+          "total": 22591
+        },
+        "std": {
+          "generated": 1316,
+          "total": 4246
+        }
+      },
+      "run": 43960709423
     },
     {
       "date": "2026-10-06",
@@ -117,26 +144,6 @@
       },
       "verified_in_ci": 246,
       "run": 42786358450
-    },
-    {
-      "date": "2026-11-17",
-      "crates": {
-        "core": {
-          "generated": 19726,
-          "total": 25336
-        },
-        "std": {
-          "generated": 1733,
-          "total": 3904
-        },
-        "alloc": {
-          "generated": 568,
-          "total": 2996
-        }
-      },
-      "verified_in_ci": 246,
-      "run": 43974619330,
-      "note": "counting fixed"
     }
   ]
 }

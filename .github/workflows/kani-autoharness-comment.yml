@@ -19,6 +19,7 @@ on:
 
 permissions:
   actions: read
+  contents: read
   pull-requests: write
   issues: write
 
@@ -101,29 +102,31 @@ jobs:
     concurrency:
       group: autoharness-status
     steps:
+      # The scripts of main, never those of a pull request.
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/kani-std-analysis
+
       - name: Update the status issue
         env:
-          CHART_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/kani-std-analysis/autoharness_history.png
-          HISTORY_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/kani-std-analysis/autoharness-history.json
-        run: |
-          if ! gh run download "$HEAD_RUN" --name ubuntu-latest-status.md --dir status; then
-            echo "Run $HEAD_RUN uploaded no status."
-            exit 0
-          fi
           # The chart is a file on main that the weekly metrics update redraws. The run ID in
           # the address makes GitHub fetch it again instead of showing a cached copy.
-          updated=$(curl -fsSL "$HISTORY_URL" | jq -r '.results[-1].date') || true
-          {
-            # The headline and what a harness is come first, then the chart, then the numbers.
-            sed -n '/^### /q;p' status/status.md
-            echo "![Where every function stands, and functions with a harness over time]($CHART_URL?run=$HEAD_RUN)"
-            echo
-            echo "Updated every week${updated:+ · last updated $(date -d "$updated" +'%b %d, %Y')}"
-            # shortcut: names the crates by hand, drop the sentence once alloc has a year of history.
-            echo "The line covers \`core\` and \`std\`. \`alloc\` has been recorded only since November 2026."
-            echo
-            sed -n '/^### /,$p' status/status.md
-          } > body.md
+          CHART_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/kani-std-analysis/autoharness_history.png?run=${{ inputs.run || github.event.workflow_run.id }}
+          # shortcut: names the crates by hand, drop the note once alloc has a year of history.
+          CHART_NOTE: The line covers `core` and `std`. `alloc` has been recorded only since November 2026.
+        run: |
+          if ! gh run download "$HEAD_RUN" --name autoharness-coverage --dir coverage \
+              || ! gh run download "$HEAD_RUN" --name ubuntu-latest-results.json --dir results; then
+            echo "Run $HEAD_RUN uploaded no autoharness results."
+            exit 0
+          fi
+          stamp=$(gh run view "$HEAD_RUN" --json createdAt,headSha,databaseId,url \
+            --jq '"\(.createdAt | fromdate | strftime("%b %d, %Y")) · commit `\(.headSha[:7])` · [run \(.databaseId)](\(.url))"')
+          updated=$(jq -r '.results[-1].date' scripts/kani-std-analysis/autoharness-history.json)
+          python3 scripts/kani-std-analysis/autoharness_report.py status coverage results/results.json \
+            --stamp "$stamp" --chart-url "$CHART_URL" --chart-updated "$(date -d "$updated" +'%b %d, %Y')" \
+            --chart-note "$CHART_NOTE" > body.md
           issue=$(gh api "repos/$GH_REPO/issues?state=open&per_page=100" --paginate \
             --jq '.[] | select(.title == "Autoharness status" and .user.login == "github-actions[bot]" and (has("pull_request") | not)) | .number' \
             | head -n 1)
