@@ -401,6 +401,9 @@ jobs:
           fi
           if [ -n "$base_run" ] && gh run download "$base_run" --name ${{ matrix.os }}-results.json --dir base; then
             echo "BASE_RUN=$base_run" >> "$GITHUB_ENV"
+            # Date and commit of that run, so that readers see what "main" was.
+            gh run view "$base_run" --json createdAt,headSha \
+              --jq '"BASE_STAMP=\(.createdAt | fromdate | strftime("%b %d, %Y")) · \(.headSha[:7])"' >> "$GITHUB_ENV" || true
             # A run from before the analyzer uploaded its output has none.
             if gh run download "$base_run" --name autoharness-coverage --dir base-coverage; then
               echo "BASE_COVERAGE=base-coverage" >> "$GITHUB_ENV"
@@ -414,15 +417,14 @@ jobs:
       - name: Add autoharness results to job summary
         env:
           RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
+          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+%22Autoharness+status%22
         run: |
           {
-            python3 scripts/kani-std-analysis/coverage_summary.py coverage \
-              ${BASE_COVERAGE:+--base "$BASE_COVERAGE"} || echo "Could not summarize the analyzer output."
+            python3 scripts/kani-std-analysis/autoharness_report.py comment coverage results.json \
+              ${BASE_COVERAGE:+--base-coverage "$BASE_COVERAGE"} ${BASE_RUN:+--base-results base/results.json} \
+              ${BASE_STAMP:+--base-stamp "$BASE_STAMP"} --status-url "$STATUS_URL" \
+              || echo "Could not summarize the autoharness results."
             echo
-            python3 scripts/kani-std-analysis/results_summary.py results.json \
-              ${BASE_RUN:+--base base/results.json} || echo "Could not summarize results.json."
-            echo
-            echo "Counts cover the functions the autoharness job selects, not the whole library."
             echo "Results of [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }} for commit ${{ github.event.pull_request.head.sha || github.sha }}${BASE_RUN:+, compared with [run $BASE_RUN on main]($RUNS_URL/$BASE_RUN)}."
           } > summary.md
           cat summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -441,17 +443,9 @@ jobs:
           RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
         run: |
           {
-            echo "The autoharness results on \`main\`. A workflow rewrites this issue after every merge."
-            echo
-            python3 scripts/kani-std-analysis/coverage_summary.py coverage || echo "Could not summarize the analyzer output."
-            echo
-            python3 scripts/kani-std-analysis/results_summary.py results.json || echo "Could not summarize results.json."
-            echo
-            echo "Counts cover the functions the autoharness job selects, not the whole library."
-            echo
-            python3 scripts/kani-std-analysis/work_list.py coverage || echo "Could not list the functions that need help."
-            echo
-            echo "From [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }} for commit ${{ github.sha }}."
+            python3 scripts/kani-std-analysis/autoharness_report.py status coverage results.json \
+              --stamp "$(date -u +'%b %d, %Y') · commit \`${GITHUB_SHA::7}\` · [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }}" \
+              || echo "Could not write the autoharness status."
           } > status.md
 
       - name: Upload status

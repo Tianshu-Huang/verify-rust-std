@@ -31,25 +31,32 @@ class WorkListTest(unittest.TestCase):
             # The same type twice blocks this function once.
             'a_safe': (MISSING, None, ['*const u8', '*const u8']),
             'bounded': (BOUNDED, 'safe', ['&[u8]']),
-            # Nothing a contributor can unblock.
-            'no_body': ('The function does not have a body', 'safe', []),
+                'no_body': ('The function does not have a body', 'safe', []),
             'kani': ('Kani implementation', 'unsafe', []),
         })
         self.assertEqual(work_list(directory), '\n'.join([
-            '### Where autoharness needs help',
+            '### Why 6 functions have no harness yet',
             '',
-            '| No harness because | Functions | Unsafe | What unblocks them |',
-            '| --- | ---: | ---: | --- |',
-            '| generic function | 1 | 0 '
-            '| write a harness that calls it with one concrete type |',
-            '| an argument type has no `kani::Arbitrary` | 3 | 1 '
-            '| implement `kani::Arbitrary` for the type, or write a harness '
-            'that builds the argument |',
-            '| needs `--bounded-arguments` | 1 | 0 '
-            '| write a harness that bounds the argument |',
+            '| Reason | | Functions | Share | Where to help |',
+            '| --- | --- | ---: | ---: | --- |',
+            '| Kani cannot create a value for one of the argument types '
+            '| ████████████ | 3 | 50% '
+            '| [kani#4887](https://redirect.github.com/model-checking/kani/issues/4887), [kani#5137](https://redirect.github.com/model-checking/kani/issues/5137) |',
+            '| The function is generic and autoharness has no type to pick '
+            '| ████ | 1 | 17% '
+            '| [kani#4888](https://redirect.github.com/model-checking/kani/issues/4888), [kani#4889](https://redirect.github.com/model-checking/kani/issues/4889) |',
+            '| An argument needs a size limit | ████ | 1 | 17% '
+            '| [kani#4890](https://redirect.github.com/model-checking/kani/issues/4890) |',
+            # Kani's own functions are not counted.
+            '| Other | ████ | 1 | 17% |  |',
             '',
-            '<details><summary>Argument types, by functions they block (3)'
-            '</summary>',
+            'These are fixed in Kani, not in this repository. The numbers '
+            'move when a pull request here updates the Kani version.',
+            '',
+            '**The functions, one by one**',
+            '',
+            '<details><summary>Argument types that block the most functions '
+            '(3 types)</summary>',
             '',
             '- `&mut i32`: 2',
             '- `*const u8`: 2',
@@ -57,14 +64,8 @@ class WorkListTest(unittest.TestCase):
             '',
             '</details>',
             '',
-            '<details><summary>generic function (1)</summary>',
-            '',
-            '- `core: generic`',
-            '',
-            '</details>',
-            '',
-            '<details><summary>an argument type has no '
-            '<code>kani::Arbitrary</code> (3)</summary>',
+            '<details><summary>Functions blocked by an argument type '
+            '(3, of which 1 unsafe)</summary>',
             '',
             '- `core: c_unsafe` (unsafe)',
             '- `core: a_safe`',
@@ -72,8 +73,15 @@ class WorkListTest(unittest.TestCase):
             '',
             '</details>',
             '',
-            '<details><summary>needs <code>--bounded-arguments</code> (1)'
+            '<details><summary>Generic functions (1, of which 0 unsafe)'
             '</summary>',
+            '',
+            '- `core: generic`',
+            '',
+            '</details>',
+            '',
+            '<details><summary>Functions that need a size limit '
+            '(1, of which 0 unsafe)</summary>',
             '',
             '- `core: bounded`',
             '',
@@ -82,7 +90,7 @@ class WorkListTest(unittest.TestCase):
         ]))
 
     def test_nothing_blocked(self):
-        self.assertIn('Autoharness generates a harness for every function.',
+        self.assertIn('Autoharness writes a harness for every function.',
                       work_list(analyzer_output({})))
 
 
