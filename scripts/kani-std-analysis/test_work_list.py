@@ -37,35 +37,30 @@ class WorkListTest(unittest.TestCase):
         self.assertEqual(work_list(directory), '\n'.join([
             '### Why 6 functions have no harness yet',
             '',
-            '| Reason | | Functions | Share | Where to help |',
-            '| --- | --- | ---: | ---: | --- |',
-            '| Kani cannot create a value for one of the argument types '
-            '| ████████████ | 3 | 50% '
-            '| [kani#4887](https://redirect.github.com/model-checking/kani/issues/4887), [kani#5137](https://redirect.github.com/model-checking/kani/issues/5137) |',
-            '| The function is generic and autoharness has no type to pick '
-            '| ████ | 1 | 17% '
-            '| [kani#4888](https://redirect.github.com/model-checking/kani/issues/4888), [kani#4889](https://redirect.github.com/model-checking/kani/issues/4889) |',
-            '| An argument needs a size limit | ████ | 1 | 17% '
-            '| [kani#4890](https://redirect.github.com/model-checking/kani/issues/4890) |',
-            # Kani's own functions are not counted.
-            '| Other | ████ | 1 | 17% |  |',
+            'To write a harness, autoharness has to call the function '
+            'with made-up arguments. It gets stuck in the ways below. '
+            'All of them are fixed in Kani, not in this repository.',
             '',
-            'These are fixed in Kani, not in this repository. The numbers '
-            'move when a pull request here updates the Kani version.',
+            '**1. Kani cannot make up a value for an argument**<br>',
+            '████████████ **3** functions (50%)',
             '',
-            '**The functions, one by one**',
+            'Some argument types are ones Kani does not know how to '
+            'make up.',
             '',
-            '<details><summary>Argument types that block the most functions '
-            '(3 types)</summary>',
+            '```rust',
+            'fn exists(path: &Path) -> io::Result<bool>   // Kani '
+            'cannot make up a &Path',
+            '```',
             '',
-            '- `&mut i32`: 2',
-            '- `*const u8`: 2',
-            '- `&[u8]`: 1',
+            '<details><summary>Which types cause this, most common '
+            'first (2 types)</summary>',
+            '',
+            '- `&mut i32`: 2 functions',
+            '- `*const u8`: 2 functions',
             '',
             '</details>',
             '',
-            '<details><summary>Functions blocked by an argument type '
-            '(3, of which 1 unsafe)</summary>',
+            '<details><summary>All 3 functions</summary>',
             '',
             '- `core: c_unsafe` (unsafe)',
             '- `core: a_safe`',
@@ -73,19 +68,65 @@ class WorkListTest(unittest.TestCase):
             '',
             '</details>',
             '',
-            '<details><summary>Generic functions (1, of which 0 unsafe)'
-            '</summary>',
+            '<sub>Tracked in '
+            '[kani#4887](https://redirect.github.com/model-'
+            'checking/kani/issues/4887), '
+            '[kani#5137](https://redirect.github.com/model-'
+            'checking/kani/issues/5137)</sub>',
+            '',
+            '**2. The function is generic**<br>',
+            '████ **1** function (17%)',
+            '',
+            'A generic function works for many types. Autoharness has '
+            'to pick one to test with, and here it found none.',
+            '',
+            '```rust',
+            'fn max_by<T, F>(v1: T, v2: T, compare: F) -> T   // which '
+            'types should T and F be?',
+            '```',
+            '',
+            '<details><summary>All 1 function</summary>',
             '',
             '- `core: generic`',
             '',
             '</details>',
             '',
-            '<details><summary>Functions that need a size limit '
-            '(1, of which 0 unsafe)</summary>',
+            '<sub>Tracked in '
+            '[kani#4888](https://redirect.github.com/model-'
+            'checking/kani/issues/4888), '
+            '[kani#4889](https://redirect.github.com/model-'
+            'checking/kani/issues/4889)</sub>',
+            '',
+            '**3. An argument can be any length**<br>',
+            '████ **1** function (17%)',
+            '',
+            'The argument is a string or a slice. Kani can only test it'
+            ' up to a maximum length, and CI does not set one.',
+            '',
+            '```rust',
+            'fn from_utf8(v: &[u8]) -> Result<&str, Utf8Error>   // v '
+            'can be any length',
+            '```',
+            '',
+            '<details><summary>Which types cause this, most common '
+            'first (1 type)</summary>',
+            '',
+            '- `&[u8]`: 1 function',
+            '',
+            '</details>',
+            '',
+            '<details><summary>All 1 function</summary>',
             '',
             '- `core: bounded`',
             '',
             '</details>',
+            '',
+            '<sub>Tracked in '
+            '[kani#4890](https://redirect.github.com/model-'
+            'checking/kani/issues/4890)</sub>',
+            '',
+            'The remaining 1 function (17%) have other reasons, such as'
+            ' a function with no body.',
             '',
         ]))
 
