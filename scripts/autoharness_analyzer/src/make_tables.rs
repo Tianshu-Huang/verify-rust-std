@@ -19,9 +19,6 @@ fn chosen_overview_table(
     let mut safe_count = 0;
     let mut safe_abstractions_count = 0;
     let mut unsafe_count = 0;
-    // Functions with a harness that the scanner lists under another name, e.g. a generic
-    // function, whose harness is named after the instantiation (`foo::<i32>`). They still count.
-    let mut unclassified_count = 0;
 
     for fn_name in &autoharness_md.chosen {
         if let Some(record) = fn_to_row_data.get(fn_name) {
@@ -39,7 +36,6 @@ fn chosen_overview_table(
                 "[WARNING] Function {} is in in autoharness metadata but absent in scanner tool output",
                 fn_name
             );
-            unclassified_count += 1;
         }
     }
 
@@ -53,13 +49,8 @@ fn chosen_overview_table(
             ],
             vec!["Unsafe Functions".into(), unsafe_count.to_string()],
             vec![
-                "Safety not classified".into(),
-                unclassified_count.to_string(),
-            ],
-            vec![
                 "Total".into(),
-                (safe_count + safe_abstractions_count + unsafe_count + unclassified_count)
-                    .to_string(),
+                (safe_count + safe_abstractions_count + unsafe_count).to_string(),
             ],
         ],
     )?)
@@ -302,8 +293,7 @@ pub fn compute_metrics(
 }
 
 /// The functions the tables count, one by one, for scripts that compare two runs or list what
-/// is left to do. `chosen` pairs each function that got a harness with its safety class,
-/// null if the scanner did not report it.
+/// is left to do. `chosen` pairs each function that got a harness with its safety class.
 /// `skipped` maps each other function to the reason (spelled as in the tables), its safety
 /// class if the scanner reported it, and the argument types the reason names.
 fn json_data(
@@ -320,11 +310,11 @@ fn json_data(
             "safe"
         })
     };
-    // Like the overview table, keep functions the scanner did not report; their safety is null.
-    let chosen: Vec<(&str, Option<&str>)> = autoharness_md
+    // Like the overview table, leave out functions the scanner did not report.
+    let chosen: Vec<(&str, &str)> = autoharness_md
         .chosen
         .iter()
-        .map(|fn_name| (fn_name.as_str(), safety(fn_name)))
+        .filter_map(|fn_name| Some((fn_name.as_str(), safety(fn_name)?)))
         .collect();
     let skipped: BTreeMap<&str, serde_json::Value> = autoharness_md
         .skipped
@@ -363,16 +353,10 @@ mod tests {
             (name.to_string(), row)
         };
         let fn_to_row_data = HashMap::from([row("f", false), row("g", true), row("k", true)]);
-        // `not_scanned` has a harness, so the table counts it too.
-        let table = chosen_overview_table(&autoharness_md, &fn_to_row_data)
-            .unwrap()
-            .to_string();
-        let total = table.lines().find(|l| l.contains("Total")).unwrap();
-        assert!(total.contains(" 3 "), "{total}");
         assert_eq!(
             json_data(&autoharness_md, &fn_to_row_data),
             serde_json::json!({
-                "chosen": [["f", "safe"], ["g", "unsafe"], ["not_scanned", null]],
+                "chosen": [["f", "safe"], ["g", "unsafe"]],
                 "skipped": {
                     "h": {
                         "reason": "Missing Arbitrary implementation for argument(s)",

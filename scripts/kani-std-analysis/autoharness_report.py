@@ -54,16 +54,31 @@ def steps(coverage, verdicts):
     return sum(counts.values()), counts[GENERATED], verified
 
 
-def status(coverage_dir, verdicts, stamp):
+def status(coverage_dir, verdicts, stamp=None, chart_url=None,
+           chart_updated=None, chart_note=None):
     """Markdown for the status issue."""
     total, written, verified = steps(coverage_summary.read(coverage_dir), verdicts)
+    # The number alone as the headline, so that it is the first thing read.
     lines = [
-        f'# {share(written, total)} of the functions in {CRATE_LIST} have a harness',
+        f'# {share(written, total)}',
+        f'of the functions in {CRATE_LIST} have a harness',
         '',
         'A harness is a test that Kani can prove for every possible input. '
         'Autoharness writes harnesses automatically. This page shows how far '
         'it gets on `main`.',
         '',
+    ]
+    if chart_url:
+        lines += [
+            '![Where every function stands, and functions with a harness '
+            f'over time]({chart_url})',
+            '',
+            '<sub>Updated every week'
+            + (f' · last updated {chart_updated}' if chart_updated else '')
+            + (f'<br>{chart_note}' if chart_note else '') + '</sub>',
+            '',
+        ]
+    lines += [
         '### The numbers today',
         '',
         '| | Functions | Share |',
@@ -76,7 +91,8 @@ def status(coverage_dir, verdicts, stamp):
         '',
     ]
     if stamp:
-        lines += [f'Updated after every merge · last updated {stamp}', '']
+        lines += [f'<sub>Updated after every merge · last updated {stamp}</sub>',
+                  '']
     lines += [
         'Why so few are verified: CI runs only the functions listed in '
         '`kani.yml`.',
@@ -234,11 +250,15 @@ def main():
     parser.add_argument('--stamp', help='date, commit and run of this run')
     parser.add_argument('--base-stamp', help='date and commit of the base run')
     parser.add_argument('--status-url', help='link to the status issue')
+    parser.add_argument('--chart-url', help='address of the history chart')
+    parser.add_argument('--chart-updated', help='date of its last point')
+    parser.add_argument('--chart-note', help='what the chart leaves out')
     args = parser.parse_args()
 
     verdicts = results_summary.read(args.results)
     if args.kind == 'status':
-        print(status(args.coverage, verdicts, args.stamp), end='')
+        print(status(args.coverage, verdicts, args.stamp, args.chart_url,
+                     args.chart_updated, args.chart_note), end='')
         return
     base_verdicts = (results_summary.read(args.base_results)
                      if args.base_results else None)

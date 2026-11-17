@@ -16,10 +16,13 @@ def verdicts(**harnesses):
 
 class StatusTest(unittest.TestCase):
     def test_status(self):
-        text = status(BASE, verdicts(kept='SUCCESSFUL'), 'Nov 10, 2026')
+        text = status(BASE, verdicts(kept='SUCCESSFUL'), 'Nov 10, 2026',
+                      'https://example.com/chart.png', 'Nov 9, 2026')
         # 4 of 8 functions: Kani's own are not counted.
         self.assertTrue(text.startswith(
-            '# 50% of the functions in core, alloc and std have a harness\n'))
+            '# 50%\nof the functions in core, alloc and std have a harness\n'))
+        self.assertIn('over time](https://example.com/chart.png)\n\n<sub>Updated '
+                      'every week · last updated Nov 9, 2026</sub>', text)
         self.assertIn('in core, alloc and std | 8 | 100% |', text)
         self.assertIn('Most have not been run yet | 4 | 50% |', text)
         self.assertIn('Kani proved it | 1 | 12% |', text)
