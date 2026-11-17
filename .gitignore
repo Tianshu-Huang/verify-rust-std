@@ -29,6 +29,8 @@ scripts/autoharness_analyzer/target/
 Cargo.lock
 /doc/mdbook-metrics/target
 *.png
+# The chart in the "Autoharness status" issue is read from the repository.
+!/scripts/kani-std-analysis/autoharness_history.png
 
 ## Temporary files
 *~

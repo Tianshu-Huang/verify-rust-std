@@ -12,6 +12,7 @@ defaults:
 jobs:
   update-kani-metrics:
     permissions:
+      actions: read # to download the autoharness results of the last merge queue run
       contents: write
       pull-requests: write
     if: github.repository == 'model-checking/verify-rust-std'
@@ -40,6 +41,24 @@ jobs:
       run: |
         ./scripts/run-kani.sh --run metrics --with-autoharness --path ${{github.workspace}}
         rm kani-list.json
+
+    # One point per week for the chart in the "Autoharness status" issue. The analyzer takes about
+    # an hour, so take the numbers of the last merge queue run instead of running it again.
+    - name: Record autoharness history
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        run=$(gh run list --workflow kani.yml --event merge_group --status success --limit 1 \
+          --json databaseId --jq '.[0].databaseId // empty') || true
+        if [ -n "$run" ] && gh run download "$run" --name autoharness-coverage --dir coverage \
+            && gh run download "$run" --name ubuntu-latest-results.json --dir results; then
+          python3 scripts/kani-std-analysis/autoharness_history.py record coverage results/results.json
+          pip install matplotlib
+          python3 scripts/kani-std-analysis/autoharness_history.py plot
+        else
+          echo "No merge queue run with autoharness results found; the history is unchanged."
+        fi
+        rm -rf coverage results
 
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v7

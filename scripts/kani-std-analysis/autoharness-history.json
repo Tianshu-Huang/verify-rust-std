@@ -1,0 +1,142 @@
+{
+  "results": [
+    {
+      "date": "2026-08-23",
+      "crates": {
+        "core": {
+          "generated": 14250,
+          "total": 22870
+        },
+        "std": {
+          "generated": 1368,
+          "total": 4187
+        }
+      },
+      "run": 32615558050
+    },
+    {
+      "date": "2026-08-30",
+      "crates": {
+        "core": {
+          "generated": 14250,
+          "total": 22870
+        },
+        "std": {
+          "generated": 1368,
+          "total": 4187
+        }
+      },
+      "run": 33322964368
+    },
+    {
+      "date": "2026-09-06",
+      "crates": {
+        "core": {
+          "generated": 14250,
+          "total": 22870
+        },
+        "std": {
+          "generated": 1368,
+          "total": 4187
+        }
+      },
+      "run": 34013151844
+    },
+    {
+      "date": "2026-09-13",
+      "crates": null,
+      "run": 34731994259
+    },
+    {
+      "date": "2026-09-20",
+      "crates": null,
+      "run": 35528670453
+    },
+    {
+      "date": "2026-09-27",
+      "crates": null,
+      "run": 36339843863
+    },
+    {
+      "date": "2026-10-06",
+      "crates": {
+        "core": {
+          "generated": 16096,
+          "total": 21694
+        },
+        "std": {
+          "generated": 1457,
+          "total": 3554
+        }
+      },
+      "run": 37399464317
+    },
+    {
+      "date": "2026-10-22",
+      "crates": {
+        "core": {
+          "generated": 16114,
+          "total": 21720
+        },
+        "std": {
+          "generated": 1471,
+          "total": 3631
+        }
+      },
+      "run": 39818384730
+    },
+    {
+      "date": "2026-11-09",
+      "crates": {
+        "core": {
+          "generated": 16079,
+          "total": 21687
+        },
+        "std": {
+          "generated": 1486,
+          "total": 3657
+        }
+      },
+      "run": 42564185648
+    },
+    {
+      "date": "2026-11-10",
+      "crates": {
+        "core": {
+          "generated": 16079,
+          "total": 21689
+        },
+        "std": {
+          "generated": 1486,
+          "total": 3657
+        },
+        "alloc": {
+          "generated": 192,
+          "total": 2620
+        }
+      },
+      "verified_in_ci": 246,
+      "run": 42786358450
+    },
+    {
+      "date": "2026-11-17",
+      "crates": {
+        "core": {
+          "generated": 19726,
+          "total": 25336
+        },
+        "std": {
+          "generated": 1733,
+          "total": 3904
+        },
+        "alloc": {
+          "generated": 568,
+          "total": 2996
+        }
+      },
+      "verified_in_ci": 246,
+      "run": 43974619330,
+      "note": "counting fixed"
+    }
+  ]
+}
