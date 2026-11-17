@@ -41,8 +41,13 @@ class WorkListTest(unittest.TestCase):
             'with made-up arguments. It gets stuck in the ways below. '
             'All of them are fixed in Kani, not in this repository.',
             '',
-            '**1. Kani cannot make up a value for an argument**<br>',
-            '████████████ **3** functions (50%)',
+            '#### 1. Kani cannot make up a value for an argument',
+            '',
+            '**3 functions** (50%) · tracked in '
+            '[kani#4887](https://redirect.github.com/model-'
+            'checking/kani/issues/4887), '
+            '[kani#5137](https://redirect.github.com/model-'
+            'checking/kani/issues/5137)',
             '',
             'Some argument types are ones Kani does not know how to '
             'make up.',
@@ -68,14 +73,13 @@ class WorkListTest(unittest.TestCase):
             '',
             '</details>',
             '',
-            '<sub>Tracked in '
-            '[kani#4887](https://redirect.github.com/model-'
-            'checking/kani/issues/4887), '
-            '[kani#5137](https://redirect.github.com/model-'
-            'checking/kani/issues/5137)</sub>',
+            '#### 2. The function is generic',
             '',
-            '**2. The function is generic**<br>',
-            '████ **1** function (17%)',
+            '**1 function** (17%) · tracked in '
+            '[kani#4888](https://redirect.github.com/model-'
+            'checking/kani/issues/4888), '
+            '[kani#4889](https://redirect.github.com/model-'
+            'checking/kani/issues/4889)',
             '',
             'A generic function works for many types. Autoharness has '
             'to pick one to test with, and here it found none.',
@@ -91,14 +95,11 @@ class WorkListTest(unittest.TestCase):
             '',
             '</details>',
             '',
-            '<sub>Tracked in '
-            '[kani#4888](https://redirect.github.com/model-'
-            'checking/kani/issues/4888), '
-            '[kani#4889](https://redirect.github.com/model-'
-            'checking/kani/issues/4889)</sub>',
+            '#### 3. An argument can be any length',
             '',
-            '**3. An argument can be any length**<br>',
-            '████ **1** function (17%)',
+            '**1 function** (17%) · tracked in '
+            '[kani#4890](https://redirect.github.com/model-'
+            'checking/kani/issues/4890)',
             '',
             'The argument is a string or a slice. Kani can only test it'
             ' up to a maximum length, and CI does not set one.',
@@ -120,10 +121,6 @@ class WorkListTest(unittest.TestCase):
             '- `core: bounded`',
             '',
             '</details>',
-            '',
-            '<sub>Tracked in '
-            '[kani#4890](https://redirect.github.com/model-'
-            'checking/kani/issues/4890)</sub>',
             '',
             'The remaining 1 function (17%) have other reasons, such as'
             ' a function with no body.',

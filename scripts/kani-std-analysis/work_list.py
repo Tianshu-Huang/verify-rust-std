@@ -44,8 +44,6 @@ BLOCKERS = dict(zip(REASONS.values(), [
      '   // v can be any length',
      [4890]),
 ]))
-BAR = 12
-
 
 def plural(n, word):
     return word if n == 1 else word + 's'
@@ -76,7 +74,6 @@ def work_list(directory):
              'To write a harness, autoharness has to call the function with '
              'made-up arguments. It gets stuck in the ways below. All of them '
              'are fixed in Kani, not in this repository.']
-    largest = max(len(functions) for functions in blocked.values())
     # Largest group first. Every reason appears once, with all that is known
     # about it, so that a reader has nothing to match up.
     rows = sorted((b for b in BLOCKERS if blocked[b]),
@@ -86,10 +83,10 @@ def work_list(directory):
         functions = sorted(blocked[blocker], key=lambda f: (not f[0], f[1]))
         count = len(functions)
         title, why, example, issues = BLOCKERS[blocker]
-        bar = '█' * round(BAR * count / largest) or '▏'
-        lines += ['', f'**{number}. {title}**<br>',
-                  f'{bar} **{count:,}** {plural(count, "function")} '
-                  f'({100 * count / total:.0f}%)',
+        links = ', '.join(f'[kani#{i}]({KANI_ISSUES}/{i})' for i in issues)
+        lines += ['', f'#### {number}. {title}', '',
+                  f'**{count:,} {plural(count, "function")}** '
+                  f'({100 * count / total:.0f}%) · tracked in {links}',
                   '', why, '', '```rust', example, '```']
         if by_type[blocker]:
             types = sorted(by_type[blocker].items(),
@@ -103,8 +100,6 @@ def work_list(directory):
             f'All {count:,} {plural(count, "function")}',
             listed(functions, lambda f: f'- {code_span(f[1])}'
                    + (' (unsafe)' if f[0] else '')))
-        links = ', '.join(f'[kani#{i}]({KANI_ISSUES}/{i})' for i in issues)
-        lines += ['', f'<sub>Tracked in {links}</sub>']
     other = len(blocked[OTHER])
     if other:
         lines += ['', f'The remaining {other:,} {plural(other, "function")} '
