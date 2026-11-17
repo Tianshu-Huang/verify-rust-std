@@ -1,0 +1,27 @@
+# Backfill only, never merged: build the autoharness metadata of this old commit and keep the
+# per-function lists, to recount them the way CI counts today.
+name: Backfill
+on: push
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Run Autoharness Analyzer
+        continue-on-error: true
+        run: scripts/run-kani.sh --run autoharness-analyzer
+      - name: Collect metadata
+        run: |
+          mkdir metadata
+          find target/kani_verify_std/target -name '*kani-metadata.json' -exec cp {} metadata/ \;
+          ls -la metadata
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metadata
+          path: |
+            metadata/core-*
+            metadata/std-*
+            metadata/alloc-*
+          if-no-files-found: error
