@@ -55,9 +55,35 @@ class CommentTest(unittest.TestCase):
                             verdicts(kept='SUCCESSFUL'))
         self.assertTrue(text.startswith(
             '## ✗ 1 harness no longer verifies\n\n**What this means:** '
-            'A proof that passes on `main` fails with this change. Fix it '
-            'before merging. CI now proves 1 more function'))
+            'A proof that passes on `main` does not pass with this change: '
+            'it fails or is no longer run. Check it before merging. CI now '
+            'proves 1 more function'))
         self.assertIn('**No longer verified**\n\n- `kept`', text)
+
+    def test_one_crate_of_two_regresses(self):
+        # The same harness name runs once per crate.
+        run = lambda result: {'result': {
+            'harness': 'twin', 'is_autoharness': True, 'result': result,
+            'time': '1'}}
+        text = self.comment(
+            harness_verdicts([run('SUCCESSFUL'), run('FAILED')]),
+            harness_verdicts([run('SUCCESSFUL'), run('SUCCESSFUL')]))
+        self.assertTrue(text.startswith('## ✗ 1 harness no longer verifies\n'))
+        self.assertIn('**No longer verified**\n\n- `twin`', text)
+
+    def test_new_harness_fails(self):
+        text = self.comment(verdicts(kept='SUCCESSFUL', broken='FAILED'),
+                            verdicts(kept='SUCCESSFUL'))
+        self.assertTrue(text.startswith(
+            '## ✗ 1 more harness fails\n\n**What this means:** '
+            '1 more harness fails than on `main`. Which functions'))
+        self.assertIn('**Failing**\n\n- `broken`', text)
+
+    def test_no_analyzer_output(self):
+        text = comment(None, verdicts(kept='SUCCESSFUL'), None,
+                       verdicts(kept='SUCCESSFUL'))
+        self.assertIn('does not change which harnesses verify. There is no '
+                      'analyzer output', text)
 
     def test_harness_changes(self):
         text = self.comment(verdicts(), verdicts(), coverage=(HEAD, BASE))

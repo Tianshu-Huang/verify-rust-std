@@ -236,7 +236,7 @@ jobs:
             --harness-timeout 10m \
             --default-unwind 1000 \
             --jobs=3 --output-format=terse | tee autoharness-verification.log || status=$?
-          # Keep the log when a harness fails: the results and the summary are built from it.
+          # Keep the log when a harness fails, so that it is uploaded too.
           gzip autoharness-verification.log
           exit ${status:-0}
 
@@ -324,7 +324,7 @@ jobs:
   run-log-analysis:
     name: Build JSON from logs
     # Also after a failed harness, so that the summary can say which one failed.
-    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness) }}
+    if: ${{ !cancelled() && needs.run_kani_metrics.result == 'success' && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || inputs.autoharness) }}
     needs: [run_kani_metrics, kani_autoharness, run-autoharness-analyzer]
     # `gh run list` and `gh run download` below read other runs of this repository.
     permissions:
@@ -434,25 +434,6 @@ jobs:
         with:
           name: ${{ matrix.os }}-summary.md
           path: summary.md
-          retention-days: 3
-
-      # The results of this run alone, with the functions that still need help. After a run on
-      # main, kani-autoharness-comment.yml writes it to the "Autoharness status" issue.
-      - name: Write status
-        env:
-          RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
-        run: |
-          {
-            python3 scripts/kani-std-analysis/autoharness_report.py status coverage results.json \
-              --stamp "$(date -u +'%b %d, %Y') · commit \`${GITHUB_SHA::7}\` · [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }}" \
-              || echo "Could not write the autoharness status."
-          } > status.md
-
-      - name: Upload status
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-status.md
-          path: status.md
           retention-days: 3
 
   run-kani-list:

@@ -83,6 +83,25 @@ def section(title, changes):
         changes, lambda c: f'- {code_span(c[0])}: {describe(c[1])} → {describe(c[2])}')
 
 
+def changes(head, base):
+    """(gained, lost, other): the harnesses with more verified runs in `head`
+    than in `base`, with fewer, and with another difference, each as
+    (harness, base runs, head runs)."""
+    gained, lost, other = [], [], []
+    for harness in sorted(base.keys() | head.keys()):
+        old, new = base.get(harness, []), head.get(harness, [])
+        if old == new:
+            continue
+        # A function that exists in several crates has one run per crate.
+        if new.count('Verified') > old.count('Verified'):
+            gained.append((harness, old, new))
+        elif new.count('Verified') < old.count('Verified'):
+            lost.append((harness, old, new))
+        else:
+            other.append((harness, old, new))
+    return gained, lost, other
+
+
 def summarize(head, base=None):
     """Markdown summary of `head`, compared with `base` if given.
 
@@ -97,19 +116,7 @@ def summarize(head, base=None):
     lines += ['| | Base | This run | Change |', '| --- | ---: | ---: | ---: |']
     lines += [change_row(v, count(base, v), count(head, v)) for v in VERDICTS]
 
-    gained, lost, other = [], [], []
-    for harness in sorted(base.keys() | head.keys()):
-        old, new = base.get(harness, []), head.get(harness, [])
-        if old == new:
-            continue
-        # A function that exists in several crates has one run per crate.
-        if new.count('Verified') > old.count('Verified'):
-            gained.append((harness, old, new))
-        elif new.count('Verified') < old.count('Verified'):
-            lost.append((harness, old, new))
-        else:
-            other.append((harness, old, new))
-
+    gained, lost, other = changes(head, base)
     if not (gained or lost or other):
         lines += ['', 'No automatic harness changed its result.']
     lines += section('Newly verified', gained)

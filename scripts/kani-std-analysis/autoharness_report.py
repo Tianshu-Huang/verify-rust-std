@@ -102,15 +102,6 @@ def status(coverage_dir, verdicts, stamp=None, chart_url=None,
     return '\n'.join(lines)
 
 
-def changes(head, base):
-    """(gained, lost) names, sorted."""
-    return sorted(head - base), sorted(base - head)
-
-
-def verified_names(verdicts):
-    return {h for h, runs in verdicts.items() if 'Verified' in runs}
-
-
 def shown(title, names):
     """A short list at the top level; the details below hold all of it."""
     if not names:
@@ -118,7 +109,9 @@ def shown(title, names):
     lines = ['', f'**{title}**', '']
     lines += [f'- {code_span(name)}' for name in names[:SHOWN]]
     if len(names) > SHOWN:
-        lines.append(f'- and {len(names) - SHOWN:,} more, listed below')
+        # The details hold at most LIST_LIMIT names of a list.
+        below = ', listed below' if len(names) <= results_summary.LIST_LIMIT else ''
+        lines.append(f'- and {len(names) - SHOWN:,} more{below}')
     return lines
 
 
@@ -134,23 +127,38 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
     base_total, base_written, base_verified = steps(
         base_coverage, base_verdicts or {})
 
-    newly, no_longer = changes(
-        verified_names(verdicts or {}), verified_names(base_verdicts or {})
-    ) if compared else ([], [])
+    # The same lists as in the details below, so that the two cannot disagree.
+    newly, no_longer, failing = [], [], []
+    if compared:
+        gained, lost, other = results_summary.changes(verdicts or {}, base_verdicts)
+        newly = [harness for harness, _, _ in gained]
+        no_longer = [harness for harness, _, _ in lost]
+        # Not verified on `main` either, but it did not fail there.
+        failing = [harness for harness, old, new in other
+                   if len(new) - new.count('Verified')
+                   > len(old) - old.count('Verified')]
     can_now, cannot = [], []
-    if coverage and base_coverage:
-        can_now, cannot = changes(
-            *({f for f, row in status.items() if row == GENERATED}
-              for status in (coverage[1], base_coverage[1])))
+    both_coverages = bool(coverage and base_coverage)
+    if both_coverages:
+        head_generated, base_generated = (
+            {f for f, row in status.items() if row == GENERATED}
+            for status in (coverage[1], base_coverage[1]))
+        can_now = sorted(head_generated - base_generated)
+        cannot = sorted(base_generated - head_generated)
 
     # The headline is the most urgent change; the sentences cover all of them.
     means = []
     if no_longer:
         means.append(
-            'A proof that passes on `main` fails with this change. Fix it '
-            'before merging.' if len(no_longer) == 1 else
-            f'{len(no_longer):,} proofs that pass on `main` fail with this '
-            'change. Fix them before merging.')
+            'A proof that passes on `main` does not pass with this change: '
+            'it fails or is no longer run. Check it before merging.'
+            if len(no_longer) == 1 else
+            f'{len(no_longer):,} proofs that pass on `main` do not pass with '
+            'this change: they fail or are no longer run. Check them before '
+            'merging.')
+    if failing:
+        means.append(f'{plural(len(failing), "more harness fails", "more harnesses fail")}'
+                     ' than on `main`.')
     if newly:
         means.append(f'CI now proves {plural(len(newly), "more function", "more functions")}'
                      ' on every pull request.')
@@ -162,7 +170,8 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
         means.append(
             f'Autoharness can no longer write a harness for {plural(len(cannot), "function", "functions")}'
             ' that had one on `main`.')
-    if (newly or no_longer) and not (can_now or cannot) and base_coverage:
+    if (newly or no_longer or failing) and not (can_now or cannot) \
+            and both_coverages:
         means.append('Which functions have a harness did not change.')
 
     if not compared:
@@ -170,6 +179,8 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
         means = ['There are no results of `main` to compare with.']
     elif no_longer:
         headline = f'✗ {plural(len(no_longer), "harness no longer verifies", "harnesses no longer verify")}'
+    elif failing:
+        headline = f'✗ {plural(len(failing), "more harness fails", "more harnesses fail")}'
     elif newly:
         headline = f'+{plural(len(newly), "harness", "harnesses")} verified in CI'
     elif can_now:
@@ -179,7 +190,10 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
     else:
         headline = 'No change to the autoharness results'
         means = ['This pull request does not change which functions have a '
-                 'harness or which harnesses verify.']
+                 'harness or which harnesses verify.' if both_coverages else
+                 'This pull request does not change which harnesses verify. '
+                 'There is no analyzer output to compare which functions '
+                 'have a harness.']
 
     def cell(n, base_n=None):
         if n is None:
@@ -207,6 +221,7 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
              row('Verified in CI', 'CI ran the harness and Kani proved it',
                  verified, base_verified)]
     lines += shown('No longer verified', no_longer)
+    lines += shown('Failing', failing)
     lines += shown('Newly verified', newly)
     lines += shown('Can now get a harness', can_now)
     lines += shown('Can no longer get a harness', cannot)

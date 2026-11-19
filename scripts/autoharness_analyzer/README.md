@@ -15,4 +15,6 @@ Without `--bounded-arguments`, functions whose arguments are only supported with
 
 The output is `autoharness_data.md`, which contains Markdown tables summarizing the autoharness application across all the crates in the standard library.
 
+For each crate it also writes `<crate>_autoharness_data.json`, which lists the functions the tables count one by one: the functions that got a harness and, for the others, the reason, the safety class and the argument types the reason names.
+
 One of the tables has a column for "Skipped Type Categories." Generally speaking, "precise types" are what we think of as actual Rust types, and "type categories" are my subjective sense of how to group those types further. For example, `&mut i32` and `&mut u32` are two precise types, but they're in the same type category `&mut`. See the code for exact details on how we create type categories; the TL;DR is that we have a few hardcoded ones for raw pointers and references, and the rest we create using a fully-qualified path splitting heuristic.

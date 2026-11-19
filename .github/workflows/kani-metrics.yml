@@ -44,6 +44,8 @@ jobs:
 
     # One point per week for the chart in the "Autoharness status" issue. The analyzer takes about
     # an hour, so take the numbers of the last merge queue run instead of running it again.
+    # A failure here must not stop the metrics update below. matplotlib is installed by
+    # run-kani.sh above.
     - name: Record autoharness history
       env:
         GH_TOKEN: ${{ github.token }}
@@ -52,9 +54,9 @@ jobs:
           --json databaseId --jq '.[0].databaseId // empty') || true
         if [ -n "$run" ] && gh run download "$run" --name autoharness-coverage --dir coverage \
             && gh run download "$run" --name ubuntu-latest-results.json --dir results; then
-          python3 scripts/kani-std-analysis/autoharness_history.py record coverage results/results.json
-          pip install matplotlib
-          python3 scripts/kani-std-analysis/autoharness_history.py plot
+          { python3 scripts/kani-std-analysis/autoharness_history.py record coverage results/results.json \
+            && python3 scripts/kani-std-analysis/autoharness_history.py plot; } \
+            || echo "Could not update the autoharness history."
         else
           echo "No merge queue run with autoharness results found; the history is unchanged."
         fi
