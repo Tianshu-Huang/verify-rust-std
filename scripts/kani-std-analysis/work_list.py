@@ -70,7 +70,9 @@ def work_list(directory):
     total = sum(len(functions) for functions in blocked.values())
     if not total:
         return 'Autoharness writes a harness for every function.\n'
-    lines = [f'### Why {total:,} functions have no harness yet', '',
+    have = 'has' if total == 1 else 'have'
+    lines = [f'### Why {total:,} {plural(total, "function")} {have} no '
+             'harness yet', '',
              'To write a harness, autoharness has to call the function with '
              'made-up arguments. It gets stuck in the ways below. All of them '
              'are fixed in Kani, not in this repository.']
