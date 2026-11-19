@@ -1522,6 +1522,9 @@ impl<T: PointeeSized> *mut T {
     #[rustc_const_stable(feature = "const_ptr_write", since = "1.83.0")]
     #[inline(always)]
     #[track_caller]
+    // Safety precondition from `ptr::write`: `self` must be valid for writes and properly aligned.
+    #[requires(core::ub_checks::can_write(self))]
+    #[cfg_attr(kani, kani::modifies(self))]
     pub const unsafe fn write(self, val: T)
     where
         T: Sized,
@@ -3155,4 +3158,19 @@ mod verify {
     //         ptr_caller.byte_offset_from(ptr_input);
     //     }
     // }
+
+    // An in-bounds pointer into the generator's buffer; the precondition (`can_write`)
+    // is assumed on it, which prunes the misaligned offsets.
+    #[kani::proof_for_contract(<*mut i32>::write)]
+    pub fn check_mut_write_i32() {
+        const BUF_SIZE: usize = 8;
+        let mut generator = kani::PointerGenerator::<BUF_SIZE>::new();
+        let test_ptr: *mut i32 = generator.any_in_bounds().ptr;
+        let val: i32 = kani::any();
+        unsafe {
+            test_ptr.write(val);
+            // Read back the value and assert it's correct
+            assert_eq!(*test_ptr, val);
+        }
+    }
 }
