@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 
 """
-Write what people read about the autoharness results of a run, as Markdown:
+Write the two texts people read about autoharness, as Markdown:
 ```
+python3 autoharness_report.py status coverage/ results.json
 python3 autoharness_report.py comment coverage/ results.json \
     [--base-coverage base-coverage/] [--base-results base-results.json]
 ```
-`comment` is the pull request comment: what the pull request changes,
-compared with `main`. `coverage/` holds the analyzer output and `results.json`
-is the output of `log_parser.py`.
+`status` is the "Autoharness status" issue: where `main` stands and which
+functions still need help. `comment` is the pull request comment: what the
+pull request changes, compared with `main`. `coverage/` holds the analyzer
+output and `results.json` is the output of `log_parser.py`.
 """
 
 import argparse
 
 import coverage_summary
 import results_summary
-from coverage_summary import CRATE_LIST, GENERATED
+import work_list
+from coverage_summary import CRATE_LIST, GENERATED, share
 from results_summary import code_span, plural
 
 # Longest list of functions shown outside the collapsed details.
@@ -38,6 +41,45 @@ def steps(coverage, verdicts):
     return sum(counts.values()), counts[GENERATED], verified
 
 
+def status(coverage_dir, verdicts, stamp=None):
+    """Markdown for the status issue."""
+    total, written, verified = steps(
+        coverage_summary.read(coverage_dir), verdicts)
+    # The number alone as the headline, so that it is the first thing read.
+    lines = [
+        f'# {share(written, total)}',
+        f'of the functions in {CRATE_LIST} have a harness',
+        '',
+        'A harness is a test that Kani can prove for every possible input. '
+        'Autoharness writes harnesses automatically. This page shows how far '
+        'it gets on `main`.',
+        '',
+    ]
+    lines += [
+        '### The numbers today',
+        '',
+        '| | Functions | Share |',
+        '| --- | ---: | ---: |',
+        f'| **All functions**<br>in {CRATE_LIST} | {total:,} | 100% |',
+        '| **Harness written**<br>Autoharness wrote a harness for the '
+        'function. Most have not been run yet '
+        f'| {written:,} | {share(written, total)} |',
+        '| **Verified in CI**<br>CI ran the harness and Kani proved it '
+        f'| {verified:,} | {share(verified, total)} |',
+        '',
+    ]
+    if stamp:
+        lines += ['<sub>Updated after every merge · last updated '
+                  f'{stamp}</sub>', '']
+    lines += [
+        'Why so few are verified: CI runs only the functions listed in '
+        '`kani.yml`.',
+        '',
+        work_list.work_list(coverage_dir),
+    ]
+    return '\n'.join(lines)
+
+
 def shown(title, names):
     """A short list at the top level; the details below hold all of it."""
     if not names:
@@ -53,7 +95,7 @@ def shown(title, names):
 
 
 def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
-            base_stamp=None):
+            base_stamp=None, status_url=None):
     """Markdown for the pull request comment.
 
     `coverage` and `base_coverage` are the output of `coverage_summary.read`,
@@ -189,6 +231,10 @@ def comment(coverage, verdicts, base_coverage=None, base_verdicts=None,
               if base_stamp else '')
         lines += ['', f'Compared with `main`{at}. If `main` has new merges '
                   'since, run this again to compare with them.']
+    if status_url:
+        lines += ['', 'Where the project stands and where help is needed: '
+                  f'[Autoharness status]({status_url}).']
+
     lines += ['', '<details><summary>Counts by reason, and every function '
               'that changed</summary>', '']
     if coverage:
@@ -211,20 +257,25 @@ def main():
     parser = argparse.ArgumentParser(
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('kind', choices=['comment'])
+    parser.add_argument('kind', choices=['status', 'comment'])
     parser.add_argument('coverage', help='directory with the analyzer output')
     parser.add_argument('results', help='results.json of the run')
     parser.add_argument('--base-coverage')
     parser.add_argument('--base-results')
+    parser.add_argument('--stamp', help='date, commit and run of this run')
     parser.add_argument('--base-stamp', help='date and commit of the base run')
+    parser.add_argument('--status-url', help='link to the status issue')
     args = parser.parse_args()
 
     verdicts = results_summary.read(args.results)
+    if args.kind == 'status':
+        print(status(args.coverage, verdicts, args.stamp), end='')
+        return
     base_verdicts = (results_summary.read(args.base_results)
                      if args.base_results else None)
     print(comment(read_coverage(args.coverage), verdicts,
                   read_coverage(args.base_coverage), base_verdicts,
-                  args.base_stamp), end='')
+                  args.base_stamp, args.status_url), end='')
 
 
 if __name__ == '__main__':

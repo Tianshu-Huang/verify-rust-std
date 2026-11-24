@@ -415,11 +415,12 @@ jobs:
       - name: Add autoharness results to job summary
         env:
           RUNS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs
+          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+%22Autoharness+status%22+author%3Aapp%2Fgithub-actions
         run: |
           {
             python3 scripts/kani-std-analysis/autoharness_report.py comment coverage results.json \
               ${BASE_COVERAGE:+--base-coverage "$BASE_COVERAGE"} ${BASE_RUN:+--base-results base/results.json} \
-              ${BASE_STAMP:+--base-stamp "$BASE_STAMP"} \
+              ${BASE_STAMP:+--base-stamp "$BASE_STAMP"} --status-url "$STATUS_URL" \
               || echo "Could not summarize the autoharness results."
             echo
             echo "Results of [run ${{ github.run_id }}]($RUNS_URL/${{ github.run_id }}) on ${{ matrix.os }} for commit ${{ github.event.pull_request.head.sha || github.sha }}${BASE_RUN:+, compared with [run $BASE_RUN on main]($RUNS_URL/$BASE_RUN)}."

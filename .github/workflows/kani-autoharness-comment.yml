@@ -1,31 +1,39 @@
 # Posts the autoharness results of a pull request as a comment on it, and updates that comment
 # on later runs. Every pull request gets the comment when it goes through the merge queue; one
-# with the run-autoharness label gets it earlier. The runs cannot do this themselves: for a pull
-# request from a fork their token is read-only. This workflow runs after them, with a token that
-# can write. It never checks out or runs code of the pull request; it only posts what that run
-# uploaded.
+# with the run-autoharness label gets it earlier. After a run on main it also rewrites the
+# "Autoharness status" issue. The runs cannot do this themselves: for a pull request from a fork
+# their token is read-only. This workflow runs after them, with a token that can write. It
+# never checks out or runs code of the pull request; it only posts what that run uploaded.
 name: Kani autoharness comment
 
 on:
   workflow_run:
     workflows: ["Kani autoharness on request", "Kani"]
     types: [completed]
+  # Rewrite the status issue from a finished run on main, without running it again.
+  workflow_dispatch:
+    inputs:
+      run:
+        description: ID of the "Kani" run on main whose results to show
+        required: true
 
 permissions:
   actions: read
   contents: read
   pull-requests: write
+  issues: write
 
 env:
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
-  HEAD_RUN: ${{ github.event.workflow_run.id }}
+  HEAD_RUN: ${{ inputs.run || github.event.workflow_run.id }}
 
 jobs:
   comment:
     # Of the "Kani" runs, only those of the merge queue run autoharness for a pull request.
     # A failed run gets a comment too: it says so, and lists what no longer verifies.
     if: >-
+      github.event_name == 'workflow_run' &&
       contains(fromJSON('["success", "failure"]'), github.event.workflow_run.conclusion) &&
       (github.event.workflow_run.name == 'Kani autoharness on request' ||
        github.event.workflow_run.event == 'merge_group')
@@ -90,4 +98,53 @@ jobs:
             gh api -X PATCH "repos/$GH_REPO/issues/comments/$comment" -F body=@comment.md
           else
             gh api -X POST "repos/$GH_REPO/issues/$PR/comments" -F body=@comment.md
+          fi
+
+  status:
+    # Results of main: a merge queue run, or a manual run on main.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.name == 'Kani' &&
+       (github.event.workflow_run.event == 'merge_group' ||
+        (github.event.workflow_run.event == 'workflow_dispatch' &&
+         github.event.workflow_run.head_branch == 'main')))
+    runs-on: ubuntu-24.04
+    # One issue: two runs must not each create it.
+    concurrency:
+      group: autoharness-status
+    steps:
+      # The scripts of main, never those of a pull request or of the branch this was started on.
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: scripts/kani-std-analysis
+          persist-credentials: false
+
+      - name: Update the status issue
+        run: |
+          # A run ID typed by hand could be of a pull request; its numbers are not those of main.
+          of_main=$(gh run view "$HEAD_RUN" --json workflowName,conclusion,event,headBranch \
+            --jq '.workflowName == "Kani" and .conclusion == "success" and (.event == "merge_group" or .headBranch == "main")')
+          if [ "$of_main" != true ]; then
+            echo "Run $HEAD_RUN is not a successful Kani run of main."
+            exit 1
+          fi
+          if ! gh run download "$HEAD_RUN" --name autoharness-coverage --dir coverage \
+              || ! gh run download "$HEAD_RUN" --name ubuntu-latest-results.json --dir results; then
+            echo "Run $HEAD_RUN uploaded no autoharness results."
+            exit 0
+          fi
+          stamp=$(gh run view "$HEAD_RUN" --json createdAt,headSha,databaseId,url \
+            --jq '"\(.createdAt | fromdate | strftime("%b %d, %Y")) · commit `\(.headSha[:7])` · [run \(.databaseId)](\(.url))"')
+          python3 scripts/kani-std-analysis/autoharness_report.py status coverage results/results.json \
+            --stamp "$stamp" > body.md
+          issues=$(gh api -X GET "repos/$GH_REPO/issues" -f state=open -f creator='github-actions[bot]' -f per_page=100 --paginate \
+            --jq '.[] | select(.title == "Autoharness status" and .user.login == "github-actions[bot]" and (has("pull_request") | not)) | .number')
+          issue=${issues%%$'\n'*}
+          if [ -n "$issue" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/$issue" -F body=@body.md
+          else
+            gh issue create --title "Autoharness status" --body-file body.md
           fi
