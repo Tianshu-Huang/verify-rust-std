@@ -1,6 +1,6 @@
 import unittest
 
-from autoharness_report import comment
+from autoharness_report import comment, status
 from coverage_summary import read
 from results_summary import harness_verdicts
 from test_coverage_summary import BASE, HEAD, analyzer_output
@@ -14,10 +14,23 @@ def verdicts(**harnesses):
         for name, result in harnesses.items()])
 
 
+class StatusTest(unittest.TestCase):
+    def test_status(self):
+        text = status(BASE, verdicts(kept='SUCCESSFUL'), 'Nov 10, 2026')
+        # 4 of 8 functions: Kani's own are not counted.
+        self.assertTrue(text.startswith(
+            '# 50%\nof the functions in core, alloc and std have a harness\n'))
+        self.assertIn('in core, alloc and std | 8 | 100% |', text)
+        self.assertIn('Most have not been run yet | 4 | 50% |', text)
+        self.assertIn('Kani proved it | 1 | 12% |', text)
+        self.assertIn('last updated Nov 10, 2026', text)
+        self.assertIn('### Why 4 functions have no harness yet', text)
+
+
 class CommentTest(unittest.TestCase):
     def comment(self, head, base, coverage=(BASE, BASE)):
         return comment(read(coverage[0]), head, read(coverage[1]), base,
-                       'Nov 10 · 8089282')
+                       'Nov 10 · 8089282', 'https://example.com/status')
 
     def test_newly_verified(self):
         text = self.comment(verdicts(kept='SUCCESSFUL', broken='SUCCESSFUL'),
@@ -32,6 +45,7 @@ class CommentTest(unittest.TestCase):
                       text)
         self.assertIn('**Newly verified**\n\n- `broken`', text)
         self.assertIn('Compared with `main` at Nov 10, commit 8089282.', text)
+        self.assertIn('[Autoharness status](https://example.com/status)', text)
 
     def test_regression_comes_first(self):
         text = self.comment(verdicts(kept='FAILED', broken='SUCCESSFUL'),

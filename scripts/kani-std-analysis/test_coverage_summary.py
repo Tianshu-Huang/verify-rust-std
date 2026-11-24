@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from coverage_summary import read, summarize
+from coverage_summary import read, share, summarize
 
 MISSING = 'Missing Arbitrary implementation for argument(s)'
 
@@ -106,6 +106,15 @@ class CoverageSummaryTest(unittest.TestCase):
         os.remove(os.path.join(directory, 'std_autoharness_data.json'))
         with self.assertRaises(FileNotFoundError):
             read(directory)
+
+    def test_share_never_rounds_a_part_to_none_or_all(self):
+        self.assertEqual(share(0, 2000), '0%')
+        self.assertEqual(share(1, 5000), '<0.1%')
+        self.assertEqual(share(246, 27966), '0.9%')
+        self.assertEqual(share(17757, 27966), '63%')
+        self.assertEqual(share(1999, 2000), '>99%')
+        self.assertEqual(share(2000, 2000), '100%')
+        self.assertEqual(share(0, 0), '0%')
 
 
 if __name__ == '__main__':

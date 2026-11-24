@@ -41,6 +41,21 @@ def load(directory):
             yield crate, json.load(f)
 
 
+def share(n, total):
+    """`n` as a percentage of `total`. A share that is not none or all is
+    never shown as 0% or 100%."""
+    if not total or not n:
+        return '0%'
+    percent = 100 * n / total
+    if percent < 0.05:
+        return '<0.1%'
+    if percent < 0.95:
+        return f'{percent:.1f}%'
+    if 99.5 <= percent < 100:
+        return '>99%'
+    return f'{percent:.0f}%'
+
+
 def row_of(reason):
     """Row a skip reason is counted in, or None if it is not counted."""
     return None if reason in NOT_COUNTED else REASONS.get(reason, OTHER)

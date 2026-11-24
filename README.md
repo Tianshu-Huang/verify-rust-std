@@ -21,6 +21,10 @@ memory safety and a subset of undefined behaviors in the Rust standard library.
 Each challenge describes the goal, the success criteria, and whether it has a financial award to be awarded upon its
 successful completion.
 
+Kani can also write harnesses on its own ([autoharness](https://model-checking.github.io/kani/reference/experimental/autoharness.html)).
+The [Autoharness status](https://github.com/model-checking/verify-rust-std/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+%22Autoharness+status%22+author%3Aapp%2Fgithub-actions)
+issue shows how many functions that covers on `main` today, and which functions still need help.
+
 These are the challenges:
 
 | Challenge | Reward | Status | Proof |
